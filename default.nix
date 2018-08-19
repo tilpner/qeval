@@ -390,7 +390,7 @@ rec {
       ${qemu}/bin/qemu-system-x86_64 \
       ${commonQemuOptions}
       ${qemuDriveOptions (builtins.attrValues storeDrives)} \
-        -incoming 'exec:${lz4}/bin/lz4 -d ${suspension args}' | ${dos2unix}/bin/dos2unix -f | head -c 500
+        -incoming 'exec:${lz4}/bin/lz4 -d ${suspension args}' | ${dos2unix}/bin/dos2unix -f | head -c 1M
 
     # ^ qemu incorrectly does crlf conversion, check in the future if still necessary
   '' // args;

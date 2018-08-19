@@ -205,6 +205,22 @@ let
       testInput = "print(\"success\")";
     };
 
+    python2 = prepareJob {
+      name = "python2";
+      aliases = [ "py2" ];
+      mem = 75;
+      storeDrives.python2 = [ python2 ];
+      preCommand = ''
+        ${python2}/bin/python2 -c "print 42"
+      '';
+
+      command = ''
+        ${python2}/bin/python2 "$1"
+      '';
+
+      testInput = "print \"success\"";
+    };
+
     ruby = prepareJob {
       name = "ruby";
       aliases = [ "rb" ];
@@ -373,7 +389,7 @@ let
     listAll = with self; [
       ash
       sh
-      python
+      python python2
       ruby
       perl
       lua

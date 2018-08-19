@@ -242,7 +242,9 @@ let
       name = "bash";
       aliases = [ "shell" "sh" ];
       mem = 60;
-      storeDrives.bash = [ bash coreutils gnused gnugrep gawk file bsdgames ];
+      storeDrives.bash = [
+        bash coreutils gnused gnugrep gawk file bsdgames tree
+      ];
 
       command = ''
         bash "$1"

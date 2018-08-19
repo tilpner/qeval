@@ -323,13 +323,14 @@ rec {
 
         closureItems = [
           self self.src run'
+          bashInteractive glibcLocales
         ];
 
         buildCommand = ''
           (
-            echo '${self.src}/bin/run flags=(complain) {'
+            echo '${self.src}/bin/run {'
             echo '  signal, ptrace,'
-            echo '  /dev/kvm' wr,
+            echo '  /dev/{kvm,null,random,urandom,tty}' wr,
             echo '  /tmp/**' wr,
             echo '  /proc/** r,'
             echo '  /sys/devices/system/** r,'

@@ -1,9 +1,12 @@
-{ pkgs }:
+{ pkgs ? import ./nixpkgs.nix }:
 
 with pkgs;
 with lib;
 
-rec {
+let
+  inherit (pkgs.nur.repos.tilpner.pkgs)
+    bitflip kernelConfig;
+in rec {
   qemu = (pkgs.qemu.override {
     sdlSupport = false;
     vncSupport = false;
@@ -22,7 +25,7 @@ rec {
 
   baseKernelPackages = linuxPackages;
 
-  kconfig = kernel-config.override {
+  kconfig = kernelConfig.override {
     linux = baseKernelPackages.kernel;
   } {
     config = {

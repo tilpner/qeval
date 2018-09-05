@@ -377,6 +377,17 @@ in rec {
 
   qemuDriveOptions = lib.concatMapStringsSep " " (d: "-drive if=virtio,readonly,format=raw,file=${d}");
 
+  suspensionUseCompression = true;
+  suspensionWriteCommand =
+    if suspensionUseCompression
+    then "${lz4}/bin/lz4 -9 --favor-decSpeed -"
+    else "cat >";
+
+  suspensionReadCommand =
+    if suspensionUseCompression
+    then "${lz4}/bin/lz4 -d --favor-decSpeed"
+    else "cat ";
+
   run = args@{ name, fullPath, initrdPath, storeDrives, mem, desc, ... }: writeShellScriptBin "run-qemu" ''
     # ${name}
     # needs ''${concatStringsSep ", " fullPath}
@@ -396,7 +407,7 @@ in rec {
       ${qemu}/bin/qemu-system-x86_64 \
       ${commonQemuOptions}
       ${qemuDriveOptions (builtins.attrValues storeDrives)} \
-        -incoming 'exec:${lz4}/bin/lz4 -d ${suspension args}' | ${dos2unix}/bin/dos2unix -f | head -c 1M
+        -incoming 'exec:${suspensionReadCommand} ${suspension args}' | ${dos2unix}/bin/dos2unix -f | head -c 1M
 
     # ^ qemu incorrectly does crlf conversion, check in the future if still necessary
   '' // args;
@@ -416,7 +427,7 @@ in rec {
 
       ( read ready < job/control
         echo '{ "execute": "qmp_capabilities" }'
-        echo '{ "execute": "migrate", "arguments": { "uri": "exec:lz4 -9 - '$out'" } }'
+        echo '{ "execute": "migrate", "arguments": { "uri": "exec:${suspensionWriteCommand} '$out'" } }'
         sleep 15 # FIXME
         echo '{ "execute": "quit" }'
       ) | ${netcat}/bin/nc -lU job/qmp &

@@ -388,6 +388,25 @@ let
       testInput = "putStrLn \"success\"";
     };
 
+    qalculate = prepareJob {
+      name = "qalculate";
+      mem = 100;
+      aliases = [ "qalc" "calc" "cal" "q" ];
+      storeDrives.qalc = [ libqalculate ];
+
+      preCommand = ''
+        mkdir /.config
+        qalc "42 byte to megabyte"
+      '';
+
+      command = ''
+        qalc -terse -file "$1"
+      '';
+
+      testInput = "\"success\"";
+      testOutput = "\"success\"";
+    };
+
     listAll = with self; [
       ash
       sh

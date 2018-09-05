@@ -67,6 +67,9 @@ in rec {
       BLK_DEV = true;
       BLK_DEV_LOOP = true;
 
+      # required by Nix, which wants to acquire the big lock
+      FILE_LOCKING = true;
+
       MISC_FILESYSTEMS = true;
       SQUASHFS = true;
       SQUASHFS_LZ4 = true;

@@ -273,7 +273,7 @@ let
       '';
 
       command = ''
-        node -p "$(cat "$1")" | tr -s '\n ' ' '
+        <"$1" node -p | tr -s '\n ' ' '
       '';
       /*
         mv "$1" /input.raw

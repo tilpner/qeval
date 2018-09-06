@@ -3,10 +3,7 @@
 with pkgs;
 with lib;
 
-let
-  inherit (pkgs.nur.repos.tilpner.pkgs)
-    bitflip kernelConfig;
-in rec {
+rec {
   qemu = (pkgs.qemu.override {
     sdlSupport = false;
     vncSupport = false;

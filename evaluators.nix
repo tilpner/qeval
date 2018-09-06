@@ -414,7 +414,7 @@ let
       ruby
       perl
       lua
-      nodejs 
+      nodejs
       haskell
       rust
       c tcc

@@ -382,7 +382,7 @@ let
       '';
 
       command = ''
-        ghci -v0 < "$1"
+        ghci -v0 -fdiagnostics-color=never < "$1"
       '';
 
       testInput = "putStrLn \"success\"";

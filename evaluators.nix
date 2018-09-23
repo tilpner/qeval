@@ -468,6 +468,7 @@ let
       brainfuck
       php
       go
+      qalculate
     ];
 
     all = symlinkJoin {

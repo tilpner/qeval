@@ -256,7 +256,7 @@ let
     ash = prepareJob {
       name = "ash";
       command = ''
-        /bin/sh "$1"
+        /bin/sh /input
       '';
 
       testInput = "echo success";

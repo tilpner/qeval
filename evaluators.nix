@@ -407,6 +407,48 @@ let
       testOutput = "\"success\"";
     };
 
+    nix =
+      let
+        nixpkgsAsDerivation = runCommand "nixpkgs-as-derivation" {} ''
+          cp -a ${path} $out
+        '';
+      in
+        prepareJob {
+          name = "nix";
+          mem = 200;
+          storeDrives.nix = [
+            (nix.override {
+              storeDir = "/tmp/nix/store";
+              stateDir = "/tmp/nix/var";
+            })
+          ];
+
+          storeDrives.nixpkgs = [ nixpkgsAsDerivation ];
+
+          preCommand = ''
+            mkdir -p /tmp/nix/var/nix/db
+            touch /tmp/nix/var/nix/db/big-lock
+
+            # echo nixbld1:x:30001:30000:Nix build user 1:/:/bin/sh >> /etc/passwd
+            # echo nixbld:x:30000:nixbld1 >> /etc/group
+
+            mkdir -p /etc/nix
+            echo 'build-users-group =' >> /etc/nix/nix.conf
+
+            nix-instantiate --eval -E "42"
+          '';
+
+          command = ''
+            export NIX_PATH=nixpkgs=${toString nixpkgsAsDerivation}
+            nix-instantiate --eval --read-write-mode --option allow-unsafe-native-code-during-evaluation true "$1"
+          '';
+
+          testInput = ''
+            with import <nixpkgs> {}; builtins.readFile (stdenvNoCC.mkDerivation { name = "foo"; buildCommand = "echo success > $out"; })
+          '';
+          testOutput = "\"success\"";
+        };
+
     listAll = with self; [
       ash
       sh

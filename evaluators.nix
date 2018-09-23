@@ -67,7 +67,7 @@ let
 
     go = prepareJob {
       name = "go";
-      mem = 100;
+      mem = 125;
       storeDrives.go = [ go ];
 
       command = ''

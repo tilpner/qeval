@@ -120,7 +120,7 @@ let
             return 0;
           };
         EOF
-        g++ -x 'c++' -o /input.out /input && /input.out
+        g++ -x 'c++' -o /input.out -w -fdiagnostics-color=never /input && /input.out
       '';
     
       testInput = "cout << \"success\" << endl;";

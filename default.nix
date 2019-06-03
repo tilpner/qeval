@@ -13,7 +13,7 @@ rec {
     hostCpuOnly = true;
   };
 
-  baseKernelPackages = linuxPackages;
+  baseKernelPackages = linuxPackages_4_14;
 
   kconfig = kernelConfig.override {
     linux = baseKernelPackages.kernel;

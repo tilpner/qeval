@@ -4,21 +4,14 @@ with pkgs;
 with lib;
 
 rec {
-  qemu = (pkgs.qemu.override {
+  qemu = pkgs.qemu.override {
     sdlSupport = false;
     vncSupport = false;
     spiceSupport = false;
     pulseSupport = false;
     smbdSupport = true;
     hostCpuOnly = true;
-  }).overrideAttrs (old: rec {
-    name = "qemu-${version}";
-    version = "3.0.0";
-    src = fetchurl {
-      url = "http://wiki.qemu.org/download/qemu-${version}.tar.bz2";
-      sha256 = "1s7bm2xhcxbc9is0rg8xzwijx7azv67skq7mjc58spsgc2nn4glk";
-    }; 
-  });
+  };
 
   baseKernelPackages = linuxPackages;
 

@@ -11,8 +11,7 @@ import <nixpkgs> {
     }}/rust-overlay.nix")
 
     (self: super: {
-      inherit (super.nur.repos.tilpner.pkgs)
-        bitflip kernelConfig;
+      inherit (super.nur.repos.tilpner.pkgs) kernelConfig;
     })
   ];
 }

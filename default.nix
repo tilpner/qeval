@@ -5,15 +5,25 @@ with lib;
 
 rec {
   qemu = pkgs.qemu.override {
-    sdlSupport = false;
-    vncSupport = false;
-    spiceSupport = false;
+    guestAgentSupport = false;
+    numaSupport = false;
+    alsaSupport = false;
     pulseSupport = false;
-    smbdSupport = true;
+    jackSupport = false;
+    sdlSupport = false;
+    gtkSupport = false;
+    vncSupport = false;
+    smartcardSupport = false;
+    spiceSupport = false;
+    ncursesSupport = false;
+    libiscsiSupport = false;
+    tpmSupport = false;
+
     hostCpuOnly = true;
+    seccompSupport = true;
   };
 
-  baseKernelPackages = linuxPackages_4_14;
+  baseKernelPackages = linuxPackages; # tested up to 5.19
 
   kconfig = kernelConfig.override {
     linux = baseKernelPackages.kernel;
@@ -21,9 +31,8 @@ rec {
     config = {
       X86 = true;
       "64BIT" = true;
-      #"PRINTK" "BUG" # extra debugging
+      # PRINTK = true; # extra debugging
 
-      LOCAL_VERSION = "qeval";
       DEFAULT_HOSTNAME = "qeval";
 
       SWAP = false;
@@ -31,6 +40,7 @@ rec {
       TTY = true;
       SERIAL_8250 = true;
       SERIAL_8250_CONSOLE = true;
+      VT = false;
 
       # execute elf and #! scripts
       BINFMT_ELF = true;
@@ -43,7 +53,7 @@ rec {
       # allow for userspace to shut kernel down
       PROC_FS = true;
       MAGIC_SYSRQ = true;
-      
+
       # needed for guest to tell qemu to shutdown
       PCI = true;
       ACPI = true;
@@ -51,6 +61,7 @@ rec {
       # allow unix domain sockets
       NET = true;
       UNIX = true;
+      WIRELESS = false;
 
       # enable block layer
       BLOCK = true;
@@ -78,16 +89,13 @@ rec {
       OVERLAY_FS = true;
 
       # support passing in various things
+      VIRTIO_MENU = true;
       VIRTIO_PCI = true;
+      VIRTIO_PCI_LEGACY = false;
       VIRTIO_BLK = true;
-      VIRTIO_INPUT = true;
       VIRTIO_CONSOLE = true;
 
       FUTEX = true;
-
-      # stop on kernel panic
-      PVPANIC = true;
-      X86_PLATFORM_DEVICES = true;
 
       # enable timers (ghc needs them)
       POSIX_TIMERS = true;
@@ -103,13 +111,16 @@ rec {
       # "FSCACHE"
       # "CACHEFILES"
 
-      # TODO: disable IR_SANYO_DECODER, etc.
-      RC_CORE = false;
-
       # required for guest to gather entropy, some applications
       # will otherwise block forever (e.g. rustc)
       HW_RANDOM = true;
       HW_RANDOM_VIRTIO = true;
+
+      SMP = true;
+      HYPERVISOR_GUEST = true;
+      KVM_GUEST = true;
+      PARAVIRT = true;
+      PARAVIRT_SPINLOCKS = true;
     };
   };
 
@@ -127,10 +138,10 @@ rec {
       mkdir -p $out/bin $out/lib
 
       # Copy what we need from Glibc.
-      cp -p ${stdenv.glibc.out}/lib/ld-linux*.so.? $out/lib
-      cp -p ${stdenv.glibc.out}/lib/libc.so.* $out/lib
-      cp -p ${stdenv.glibc.out}/lib/libm.so.* $out/lib
-      cp -p ${stdenv.glibc.out}/lib/libresolv.so.* $out/lib
+      cp -p ${glibc}/lib/ld-linux*.so.? $out/lib
+      cp -p ${glibc}/lib/libc.so.* $out/lib
+      cp -p ${glibc}/lib/libm.so.* $out/lib
+      cp -p ${glibc}/lib/libresolv.so.* $out/lib
 
       # Copy BusyBox.
       cp -pd ${busybox}/bin/* $out/bin
@@ -146,14 +157,10 @@ rec {
       done
     '';
 
-  closurePaths = path:
-    let closure = closureInfo { rootPaths = path; };
-        text = lib.fileContents "${closure}/store-paths";
-    in lib.splitString "\n" text;
-
   stage1 = writeScript "vm-run-stage1" ''
     #! ${initrdUtils}/bin/ash -e
     export PATH=${initrdUtils}/bin
+    echo
 
     mkdir /etc
     echo -n > /etc/fstab
@@ -161,7 +168,6 @@ rec {
     mount -t proc none /proc
     mount -t sysfs none /sys
 
-    # Does this even work with the current config?
     echo 2 > /proc/sys/vm/panic_on_oom
 
     for o in $(cat /proc/cmdline); do
@@ -178,9 +184,6 @@ rec {
     done
 
     mount -t devtmpfs devtmpfs /dev
-
-    # ifconfig lo up
-    stty -icrnl -igncr # necessary?
 
     mkdir -p /dev/shm /dev/pts
     mount -t tmpfs -o "mode=1777" none /dev/shm
@@ -209,19 +212,19 @@ rec {
 
     stores="$( ( find /mnt/store -mindepth 1 -maxdepth 1; echo /nix/store ) | paste -sd :)"
     echo stores: $stores
-    mount -t overlay overlay -o "ro,lowerdir=$stores" /nix/store 
+    mount -t overlay overlay -o "ro,lowerdir=$stores" /nix/store
 
     if [ -n "$jobDesc" ]; then
       . "$jobDesc"
     fi
 
-    "$preCmd"
+    . "$preCmd"
 
     echo ready > /dev/vport2p1
     read -r input < /dev/vport2p1
     echo "$input" > /input
 
-    "$cmd" /input
+    . "$cmd" /input
 
     exec poweroff -f
   '';
@@ -230,20 +233,23 @@ rec {
     contents = [
       { object = stage1;
         symlink = "/init"; }
-      { object = linkFarm "extra"
-          (map (p: { name = p.name; path = toString p; }) initrdPath);
-        symlink = "/tmp/extra"; }
     ];
   };
 
-  squashfsTools = pkgs.squashfsTools.override { lz4Support = true; };
-  mkSquashFs = settings: contents: bitflip.flipTwice (stdenv.mkDerivation {
+  # https://github.com/NixOS/nix/issues/5633
+  removeReferences = let
+    flip = drv: pkgs.runCommand "flipped-${drv.name}" { inherit drv; } ''
+      tr a-z0-9 n-za-m5-90-4 < "$drv" > "$out"
+    '';
+  in drv: flip (flip drv);
+
+  mkSquashFs = settings: contents: removeReferences (stdenv.mkDerivation {
     name = "squashfs.img";
     nativeBuildInputs = [ squashfsTools ];
     buildCommand = ''
       closureInfo=${closureInfo { rootPaths = contents; }}
       mksquashfs $(cat $closureInfo/store-paths) $out \
-        -keep-as-directory -all-root -b 1048576 ${settings} 
+        -keep-as-directory -all-root -b 1048576 ${settings}
     '';
   });
 
@@ -354,18 +360,18 @@ rec {
   commonQemuOptions = ''
     -only-migratable \
     -nographic -no-reboot \
-    -cpu IvyBridge \
-    -enable-kvm \
-    -net none -m "$mem" \
+    -sandbox on,spawn=allow \
+    -cpu qemu64 -enable-kvm \
+    -m "$mem" \
+    -net none \
     -device virtio-rng-pci,max-bytes=1024,period=1000 \
     -device virtio-serial-pci \
     -device virtio-serial \
-    -device pvpanic \
     -chardev pipe,path="$job"/control,id=control \
     -device virtserialport,chardev=control,id=control \
-    -qmp-pretty unix:"$job"/qmp,nowait \'';
+    -qmp-pretty unix:"$job"/qmp '';
 
-  qemuDriveOptions = lib.concatMapStringsSep " " (d: "-drive if=virtio,readonly,format=raw,file=${d}");
+  qemuDriveOptions = lib.concatMapStringsSep " " (d: "-drive if=virtio,readonly=on,format=raw,file=${d}");
 
   suspensionUseCompression = true;
   suspensionWriteCommand =
@@ -375,35 +381,29 @@ rec {
 
   suspensionReadCommand =
     if suspensionUseCompression
-    then "${lz4}/bin/lz4 -d --favor-decSpeed"
+    then "${lz4}/bin/lz4 -dc --favor-decSpeed"
     else "cat ";
 
   run = args@{ name, fullPath, initrdPath, storeDrives, mem, desc, ... }: writeShellScriptBin "run-qemu" ''
     # ${name}
-    # needs ''${concatStringsSep ", " fullPath}
     job="$1"
     shift
-    mkfifo "$job"/control
+    mkfifo "$job"/control.{in,out}
     mem="${toString mem}"
 
-    ( echo '{ "execute": "qmp_capabilities" }'
-    ) | ${netcat}/bin/nc -lU "$job"/qmp >/dev/null &
+    ${netcat}/bin/nc -lU "$job"/qmp </dev/null >/dev/null &
 
-    ( echo "$@" 
-      echo ". /input"
-    ) > "$job"/control &
+    printf '%s\n' "$*" > "$job"/control.in &
 
-    timeout --foreground 10 \
-      ${qemu}/bin/qemu-system-x86_64 \
-      ${commonQemuOptions}
+    timeout --foreground 10 ${qemu}/bin/qemu-system-x86_64 \
+      ${commonQemuOptions} \
       ${qemuDriveOptions (builtins.attrValues storeDrives)} \
         -incoming 'exec:${suspensionReadCommand} ${suspension args}' | ${dos2unix}/bin/dos2unix -f | head -c 1M
-
-    # ^ qemu incorrectly does crlf conversion, check in the future if still necessary
   '' // args;
+  # ^ qemu incorrectly does crlf conversion, check in the future if still necessary
 
   # if this doesn't build, and just silently sits there, try increasing memory
-  suspension = { name, initrdPath, fullPath, storeDrives, mem, desc }: bitflip.flipTwice (stdenv.mkDerivation {
+  suspension = { name, initrdPath, fullPath, storeDrives, mem, desc }: removeReferences (stdenv.mkDerivation {
     name = "${name}-suspension";
     requiredSystemFeatures = [ "kvm" ];
     nativeBuildInputs = [ qemu netcat lz4 ];
@@ -413,21 +413,21 @@ rec {
     buildCommand = ''
       mkdir job
       job=$PWD/job
-      mkfifo job/control
+      mkfifo job/control.{in,out}
 
-      ( read ready < job/control
+      ( read ready < job/control.out
         echo '{ "execute": "qmp_capabilities" }'
         echo '{ "execute": "migrate", "arguments": { "uri": "exec:${suspensionWriteCommand} '$out'" } }'
         sleep 15 # FIXME
         echo '{ "execute": "quit" }'
       ) | ${netcat}/bin/nc -lU job/qmp &
 
-      qemu-system-x86_64 \
-      ${commonQemuOptions}
-      ${qemuDriveOptions (builtins.attrValues storeDrives)} \
-        -kernel ${kernel}/bzImage \
-        -initrd ${initrd initrdPath}/initrd \
-        -append "console=ttyS0,38400 tsc=unstable jobDesc=${desc}"
+      timeout 60 qemu-system-x86_64 \
+        ${commonQemuOptions} \
+        ${qemuDriveOptions (builtins.attrValues storeDrives)} \
+          -kernel ${kernel}/bzImage \
+          -initrd ${initrd initrdPath}/initrd \
+          -append "console=ttyS0,38400 tsc=unstable panic=-1 jobDesc=${desc}"
     '';
   });
 

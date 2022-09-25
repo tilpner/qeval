@@ -122,7 +122,7 @@ let
         EOF
         g++ -x 'c++' -o /input.out -w -fdiagnostics-color=never /input && /input.out
       '';
-    
+
       testInput = "cout << \"success\" << endl;";
     };
 
@@ -225,7 +225,7 @@ let
       name = "ruby";
       aliases = [ "rb" ];
       mem = 100;
-      storeDrives.ruby = [ ruby_2_5 ];
+      storeDrives.ruby = [ ruby ];
 
       preCommand = ''
         echo 42 | ruby
